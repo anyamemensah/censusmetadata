@@ -1,0 +1,8 @@
+certifi==2025.11.12
+charset-normalizer==3.4.4
+idna==3.11
+polars==1.35.1
+polars-runtime-32==1.35.1
+requests==2.32.3
+typing==3.7.4.3
+urllib3==2.5.0

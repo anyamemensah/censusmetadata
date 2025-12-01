@@ -1,0 +1,22 @@
+[project]
+name = "censusmetadata"
+version = "0.1.0"
+description = "censusmetadata simplifies Census Bureau dataset discovery and metadata retrieval."
+readme = "README.md"
+authors = [
+    { name = "Ama Nyame-Mensah", email = "ama@anyamemensah.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "polars==1.35.1",
+    "requests==2.32.3",
+    "typing==3.7.4.3",
+]
+
+[project.scripts]
+censusmetadata = "censusmetadata:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
