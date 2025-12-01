@@ -104,7 +104,7 @@ def build_url(name: str | None = None,
     
     path = re.sub("/{2,}", "/", "/".join(parts)) + ".json"
     
-    return f"{baseURL}/{path}"
+    return f"{baseURL}{path}" if path == ".json" else f"{baseURL}/{path}"
 
 
 def status_messages(code: int, url: str): 
