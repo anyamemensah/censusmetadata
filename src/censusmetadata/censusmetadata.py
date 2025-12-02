@@ -131,12 +131,11 @@ def extract_datasets(resp: dict):
     Parameters
     ----------
     resp
-        The `.text` property of the requests response, which has been 
-        parsed with `json.loads()` and converted into a dict.
+        JSON content of the requests response.
 
     Examples
     --------
-    >>> import json
+    >>> import json # example using json.loads()
     >>> example = json.loads('''{
     "@type": "dcat:Catalog",
     "dataset": [
