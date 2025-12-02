@@ -7,7 +7,7 @@ from censusmetadata.utility import enforce_bool
 from censusmetadata.utility import enforce_list_str
 from censusmetadata.utility import check_response
 from censusmetadata.utility import validate_inputs
-from censusmetadata.exceptions import MissingAPIValueError
+from censusmetadata.exceptions import MissingKeyError
 
 
 def get_census_apis(name: str | None = None, vintage: int | None = None) -> pl.DataFrame:
@@ -38,14 +38,9 @@ def get_census_apis(name: str | None = None, vintage: int | None = None) -> pl.D
     url = build_url(name = name, vintage = vintage)
 
     resp = check_response(url)
-    if resp is not None:
-        meta_data = extract_datasets(resp = resp)
-        if meta_data.is_empty():
-            return pl.DataFrame()
-        else: 
-            return meta_data
-    else:
+    if resp is None:
         return pl.DataFrame()
+    return extract_datasets(resp = resp)
 
 
 def get_census_metadata(name: str,
@@ -109,33 +104,29 @@ def get_census_metadata(name: str,
         )
 
     resp = check_response(url)
-    if resp is not None:
-        if meta_type == "variables":
-            return extract_variables(
-                resp = resp, 
-                variables = variables, # type: ignore[valid-type]
-                include_labels = include_labels,
-                meta_type = meta_type
-            )
-        elif meta_type in ["geography", "groups"]:
-            meta_map = {
-                "geography": "fips",
-                "groups": "groups"
-            }
-            meta_type = meta_map[meta_type]
-            return extract_geo_or_grp(resp = resp, meta_type = meta_type)
-        else:
-            raise ValueError(f"Invalid meta_type '{meta_type}'. 'meta_type' must be one of "
-                             f"'variables', 'geography', or 'groups'.")
-    else:
+    if resp is None:
         return pl.DataFrame()
+
+    if meta_type == "variables":
+        return extract_variables(
+            resp=resp,
+            variables=variables,  # type: ignore[valid-type]
+            include_labels=include_labels,
+            meta_type=meta_type
+        )
+
+    meta_map = {"geography": "fips", "groups": "groups"}
+    if meta_type in meta_map:
+        return extract_geo_or_grp(resp=resp, meta_type=meta_map[meta_type])
+
+    raise ValueError(f"Invalid meta_type '{meta_type}'. 'meta_type' must be one of "
+                    f"'variables', 'geography', or 'groups'.")
+
 
 def extract_datasets(resp: dict):
     """
-    A helper function that constructs a Polars DataFrame from 
-    a JSON object, enabling the retrieval of datasets from the 
-    Census API and organizing them as entries within a Polars 
-    DataFrame.
+    Helper function to convert a JSON object into a Polars 
+    DataFrame for organizing Census Bureau API datasets
 
     Parameters
     ----------
@@ -186,10 +177,8 @@ def extract_datasets(resp: dict):
     │ acronym ┆ Survey or Program Name ┆ Description is.... │
     └─────────┴────────────────────────┴────────────────────┘
     """
-    resp_keys = list(resp.keys())
-
-    if "dataset" not in resp_keys:
-        raise MissingAPIValueError(value = "dataset", value_type = "key")
+    if "dataset" not in resp:
+        raise MissingKeyError(value = "dataset", value_type = "key")
     
     # main df
     tmp_df = (
@@ -200,12 +189,13 @@ def extract_datasets(resp: dict):
     # build out expressions
     dataset_type_exprs = [
         (
-            pl.when(pl.col(var))
-            .then(True)
-            .otherwise(False)
-            .alias(var)
+            pl.when(pl.col(var)).then(True)
+                .otherwise(False)
+                .alias(var)
         ) if var in tmp_df.columns else (
-            pl.col("dataset").list.contains(re.sub("^is", "", var).lower()).alias(var)
+            pl.col("dataset")
+                .list.contains(re.sub("^is", "", var).lower())
+                .alias(var)
         )
         for var in ["isAggregate", "isMicrodata", "isTimeseries"]
     ]
@@ -230,10 +220,11 @@ def extract_datasets(resp: dict):
         .with_columns(dataset_type_exprs)
         .with_columns(
             pl.when(pl.col("isMicrodata")).then(pl.lit("Microdata"))
-            .when(pl.col("isAggregate")).then(pl.lit("Aggregate"))
-            .otherwise(pl.lit("Timeseries"))
-            .alias("type"),
-            pl.col("distribution").list.explode().struct.field("accessURL").alias("api_url"),
+                .when(pl.col("isAggregate")).then(pl.lit("Aggregate"))
+                .otherwise(pl.lit("Timeseries"))
+                .alias("type"),
+            pl.col("distribution")
+                .list.explode().struct.field("accessURL").alias("api_url"),
             pl.col("contactPoint").struct.field("hasEmail").alias("contact"),
             pl.col("dataset").list.join("/").alias("dataset"),
         )
@@ -256,30 +247,24 @@ def helper_extract_variables(resp_data: dict,
 
     for var in variables:
         var_frame = pl.DataFrame({"name": var, **resp_data[var]})
+        labels_frame = None
 
         if include_labels and "values" in var_frame.columns:
             values_frame = var_frame.select("values").unnest("values")
-            val_cols = values_frame.columns
-            if "item" in val_cols:
+            if "item" in values_frame.columns:
                 labels_frame = (
                     values_frame
-                    .select("item")
-                    .unpivot()
-                    .unnest("value")
-                    .unpivot()
-                    .rename({"variable": "code", "value": "code_label"})
-                    .filter(~pl.col("code").eq("variable"))
-                    .with_columns(pl.lit(var).alias("name"))
+                        .select("item")
+                        .unpivot()
+                        .unnest("value")
+                        .unpivot()
+                        .rename({"variable": "code", "value": "code_label"})
+                        .filter(~pl.col("code").eq("variable"))
+                        .with_columns(pl.lit(var).alias("name"))
                 )
-                combined = var_frame.join(labels_frame, on="name")
-            else:
-                combined = var_frame
-        else:
-            combined = var_frame
 
+        combined = var_frame.join(labels_frame, on="name") if labels_frame is not None else var_frame
         frame.append(combined)
-
-    full_frame = pl.concat(frame, how = "diagonal_relaxed")
 
     vars_to_retain = [
         "name",
@@ -291,6 +276,7 @@ def helper_extract_variables(resp_data: dict,
         "code", 
         "code_label" 
     ]
+    full_frame = pl.concat(frame, how = "diagonal_relaxed")
     select_vars = [v for v in vars_to_retain if v in full_frame.columns]
     full_frame = full_frame.select(select_vars)
     
@@ -302,13 +288,13 @@ def extract_variables(resp: dict,
                       include_labels: bool = False,
                       meta_type: str = "variables"):
     """
-    A helper function designed to retrieve variable details, such 
-    as names, labels, values, and value labels, from a chosen dataset 
-    available through the Census API.
+    Helper function to retrieve variable metadata, such as 
+    names, labels, values (code), and value labels (code_label, 
+    from a chosen dataset available through the Census Bureau's 
+    API.
     """
-    resp_keys = list(resp.keys())
-    if meta_type not in resp_keys:
-        raise MissingAPIValueError(value = meta_type, value_type = "key")
+    if meta_type not in resp:
+        raise MissingKeyError(value = meta_type, value_type = "key")
    
     meta_data_df = helper_extract_variables(
         resp_data = resp[meta_type], 
@@ -325,9 +311,8 @@ def extract_geo_or_grp(resp: dict, meta_type: str):
     information from a chosen dataset available through the U.S.
     Census Bureau API.
     """
-    resp_keys = list(resp.keys())
-    if meta_type not in resp_keys:
-        raise MissingAPIValueError(value = "key", value_type = meta_type)
+    if meta_type not in resp:
+        raise MissingKeyError(value = "key", value_type = meta_type)
    
     tmp_df = pl.DataFrame(resp[meta_type])
 
@@ -339,4 +324,3 @@ def extract_geo_or_grp(resp: dict, meta_type: str):
     meta_data_df = tmp_df
 
     return meta_data_df
-

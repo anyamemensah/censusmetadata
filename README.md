@@ -15,7 +15,8 @@ uv add git+https://github.com/anyamemensah/censusmetadata.git
 1. Import libraries:
 
 ```python
-from censusmetadata import get_census_apis, get_census_metadata
+from censusmetadata import get_census_apis 
+from censusmetadata import get_census_metadata
 import polars as pl
 ```
 

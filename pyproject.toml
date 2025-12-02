@@ -6,11 +6,10 @@ readme = "README.md"
 authors = [
     { name = "Ama Nyame-Mensah", email = "ama@anyamemensah.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "polars==1.35.1",
     "requests==2.32.3",
-    "typing==3.7.4.3",
 ]
 
 [project.scripts]
