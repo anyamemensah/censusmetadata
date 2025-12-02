@@ -174,7 +174,7 @@ shape: (5, 6)
 └──────────────────────┴──────────────────────┴────────────┴──────────┴───────────────┴───────┘
 ```
 
-By default, datasets do not include variable values and value labels. To add this information, set `include_labels = True`. The example below demonstrates how to retrieve these details and filter out rows where this information is present.
+By default, datasets do not include variable values and value labels. To add this information, set `include_labels = True`. The example below demonstrates how to retrieve these details and filter to retain rows where this information is present.
 
 ```python
 pep_2021_labels = get_census_metadata(
